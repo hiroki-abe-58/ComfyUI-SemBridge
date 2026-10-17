@@ -1,5 +1,5 @@
 {
- "id": "33e881c6-24e6-4cb4-9260-341a64f229a6",
+ "id": "f087bfb7-5777-4092-82ac-78aa978daa12",
  "revision": 0,
  "last_node_id": 4,
  "last_link_id": 6,
@@ -13,7 +13,7 @@
    ],
    "size": [
     270,
-    130
+    154
    ],
    "flags": {},
    "order": 0,
@@ -87,6 +87,23 @@
       "name": "keep_loaded"
      },
      "link": null
+    },
+    {
+     "color_off": null,
+     "color_on": null,
+     "dir": null,
+     "label": null,
+     "localized_name": "codec_numerics",
+     "locked": null,
+     "name": "codec_numerics",
+     "nameLocked": null,
+     "removable": null,
+     "shape": 7,
+     "type": "COMBO",
+     "widget": {
+      "name": "codec_numerics"
+     },
+     "link": null
     }
    ],
    "outputs": [
@@ -116,13 +133,15 @@
     "SemBridge",
     "bfloat16",
     "auto",
-    true
+    true,
+    "reproducible"
    ],
    "widgets_values_named": {
     "model_dir": "SemBridge",
     "dtype": "bfloat16",
     "device": "auto",
-    "keep_loaded": true
+    "keep_loaded": true,
+    "codec_numerics": "reproducible"
    }
   },
   {

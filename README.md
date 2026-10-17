@@ -115,8 +115,8 @@ RTX 5090 32 GB, Windows 11, ComfyUI v0.38.0, torch 2.14.1+cu130, bfloat16 (the o
 
 | | Speech (native decoder) | Singing / mixed (BigVGAN-Large) |
 | --- | --- | --- |
-| Generation time per second of audio | about 1.0 to 1.6 s | about 2.2 to 2.7 s |
-| Peak VRAM allocated by the model | 2.7 to 3.0 GiB | 2.9 to 3.9 GiB |
+| Generation time per second of audio | about 1.2 to 1.6 s | about 2.3 to 2.8 s |
+| Peak VRAM allocated by the model | 2.8 to 3.0 GiB | 2.9 to 3.9 GiB |
 
 So generation is slower than real time on this GPU (the autoregressive loop is small-kernel bound). A 29 s utterance needed 4.3 GiB.
 Loading takes about 6 s with a warm file cache. float32 needs 4.5 GiB, float16 and bfloat16 about 2.9 GiB. System commit charge rose by
