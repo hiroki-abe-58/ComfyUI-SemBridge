@@ -129,6 +129,44 @@ def test_comfy_resample_equals_torchaudio(comfy_dir, torchaudio_mod):
         np.testing.assert_allclose(resample(x, src, 44100).numpy(), torchaudio.functional.resample(x, src, 44100).numpy(), rtol=0, atol=1e-6)
 
 
+def test_eager_snake_is_the_same_formula_as_the_official_scripted_one():
+    from sembridge_comfy.vendor.sembridge.models import savae
+
+    torch.manual_seed(0)
+    x, alpha = torch.randn(2, 8, 50), torch.rand(1, 8, 1) + 0.5
+    np.testing.assert_allclose(runtime._eager_snake(x, alpha).numpy(), savae.snake(x, alpha).numpy(), rtol=1e-5, atol=1e-6)
+
+
+def test_codec_numerics_switch_is_scoped_and_restored():
+    from sembridge_comfy.vendor.sembridge.models import savae
+
+    original = savae.snake
+    with runtime.codec_numerics("reproducible"):
+        assert savae.snake is runtime._eager_snake
+    assert savae.snake is original
+    with runtime.codec_numerics("official-torchscript"):
+        assert savae.snake is original
+    with pytest.raises(RuntimeError):
+        with runtime.codec_numerics("reproducible"):
+            raise RuntimeError
+    assert savae.snake is original
+
+
+def test_unknown_numerics_mode_is_rejected(loaded, tiny_model):
+    with pytest.raises(ValueError, match="codec_numerics"):
+        runtime.make_handle(str(tiny_model), "float32", "cpu", True, "fast")
+    with pytest.raises(ValueError, match="codec_numerics"):
+        runtime.generate(loaded, **BASE, task="tts", text="Hello.", numerics="fast")
+
+
+def test_both_numerics_modes_run_and_repeat_exactly(loaded):
+    for mode in runtime.CODEC_NUMERICS:
+        first = runtime.generate(loaded, **BASE, task="tts", text="Hello there.", prompt=_reference(), prompt_text="la", numerics=mode)
+        again = runtime.generate(loaded, **BASE, task="tts", text="Hello there.", prompt=_reference(), prompt_text="la", numerics=mode)
+        assert first["report"]["codec_numerics"] == mode
+        assert torch.equal(first["audio"]["waveform"], again["audio"]["waveform"])  # on the CPU TorchScript does not fuse, so both repeat
+
+
 def test_release_frees_the_slot(tiny_model):
     handle = runtime.make_handle(str(tiny_model), "float32", "cpu", False)
     first = runtime.acquire(handle)

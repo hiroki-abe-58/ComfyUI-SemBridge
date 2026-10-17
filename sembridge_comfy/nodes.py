@@ -75,7 +75,7 @@ def _run(model, progress_total, **kwargs) -> io.NodeOutput:
     loaded = runtime.acquire(model)
     info = loaded.info
     try:
-        out = runtime.generate(loaded, progress=_progress(progress_total), **kwargs)
+        out = runtime.generate(loaded, progress=_progress(progress_total), numerics=model.get("codec_numerics", "reproducible"), **kwargs)
     finally:
         del loaded  # drop this reference first, otherwise release() cannot free the weights
         if not model.get("keep_loaded", True):
@@ -98,13 +98,17 @@ class SemBridgeLoader(io.ComfyNode):
                 io.Combo.Input("dtype", options=list(runtime.DTYPES), default="bfloat16", tooltip="bfloat16 is the official GPU setting. The CPU path always runs float32."),
                 io.Combo.Input("device", options=["auto", "cuda", "cpu"], default="auto"),
                 io.Boolean.Input("keep_loaded", default=True, tooltip="Keep the model in memory after the job. Turn off to free VRAM for other models after every generation."),
+                io.Combo.Input("codec_numerics", options=list(runtime.CODEC_NUMERICS), default="reproducible", optional=True,
+                               tooltip="reproducible: the same request gives the same audio on every run (plain PyTorch ops for the codec's Snake activation). "
+                                       "official-torchscript: the official TorchScript function; its first call after loading rounds differently from later calls, "
+                                       "so the first run can differ from the rest."),
             ],
             outputs=[SemBridgeModel.Output(display_name="model")],
         )
 
     @classmethod
-    def execute(cls, model_dir, dtype, device, keep_loaded) -> io.NodeOutput:
-        handle = runtime.make_handle(paths.model_path(model_dir), dtype, device, keep_loaded)
+    def execute(cls, model_dir, dtype, device, keep_loaded, codec_numerics="reproducible") -> io.NodeOutput:
+        handle = runtime.make_handle(paths.model_path(model_dir), dtype, device, keep_loaded, codec_numerics)
         return io.NodeOutput(handle)
 
 

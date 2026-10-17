@@ -28,6 +28,12 @@ UPSTREAM_COMMIT = "e8bee2777a0dececf87efb6705992c974b51c9b4"
 MODEL_REVISION = "4fb6534f7c697f0aea90e71dc5a6f3123596ae45"
 DTYPES = {"bfloat16": torch.bfloat16, "float16": torch.float16, "float32": torch.float32}
 DECODERS = ("auto", "native", "bigvgan")
+# The official codec computes its Snake activation with a @torch.jit.script function. TorchScript's profiling executor runs a
+# script function un-fused for its first call and fused afterwards, and the two give different float32 rounding, so the same
+# request can give different audio on the first run after loading than on later runs (measured: 69 patches vs 67 for the
+# same request and seed). "reproducible" computes the same formula with plain PyTorch ops, which gives the same numbers on every
+# call; "official-torchscript" keeps the official function (output equal to the official code, including its call-history effect).
+CODEC_NUMERICS = ("reproducible", "official-torchscript")
 APPROX_VRAM_BYTES = 8 * 1024**3  # what to ask ComfyUI to free before loading (measured peak is lower, see the README)
 
 _LOCK = threading.RLock()
@@ -96,11 +102,39 @@ def resolve_device(choice: str) -> torch.device:
     raise ValueError(f"unknown device {choice!r}")
 
 
-def make_handle(path: str, dtype: str, device: str, keep_loaded: bool) -> dict:
+def make_handle(path: str, dtype: str, device: str, keep_loaded: bool, codec_numerics: str = "reproducible") -> dict:
+    if codec_numerics not in CODEC_NUMERICS:
+        raise ValueError(f"codec_numerics must be one of {CODEC_NUMERICS}")
     dev = resolve_device(device)
     if dev.type == "cpu" and dtype != "float32":
         dtype = "float32"  # the official loader refuses CPU + half precision
-    return {"path": path, "dtype": dtype, "device": str(dev), "keep_loaded": bool(keep_loaded)}
+    return {"path": path, "dtype": dtype, "device": str(dev), "keep_loaded": bool(keep_loaded), "codec_numerics": codec_numerics}
+
+
+def _eager_snake(inputs, alpha):
+    """sembridge.models.savae.snake with the same operations, as an ordinary (un-scripted) function."""
+    shape = inputs.shape
+    flattened = inputs.reshape(shape[0], shape[1], -1)
+    flattened = flattened + (alpha + 1e-9).reciprocal() * torch.sin(alpha * flattened).square()
+    return flattened.reshape(shape)
+
+
+_OFFICIAL_SNAKE = None
+
+
+@contextlib.contextmanager
+def codec_numerics(mode: str):
+    """Select the Snake implementation for the duration of one generation (the module attribute is looked up at call time)."""
+    global _OFFICIAL_SNAKE
+    from .vendor.sembridge.models import savae
+
+    if _OFFICIAL_SNAKE is None:
+        _OFFICIAL_SNAKE = savae.snake
+    savae.snake = _eager_snake if mode == "reproducible" else _OFFICIAL_SNAKE
+    try:
+        yield
+    finally:
+        savae.snake = _OFFICIAL_SNAKE
 
 
 def _free_vram(dev: torch.device) -> None:
@@ -181,11 +215,14 @@ def generate(
     prompt_text: str | None = None,
     prompt_task: str | None = None,
     progress=None,
+    numerics: str = "reproducible",
 ) -> dict:
     """Run one request; returns {"audio": ComfyUI AUDIO dict, "report": dict}."""
     pipeline = loaded.pipeline
     if decoder not in DECODERS:
         raise ValueError(f"decoder must be one of {DECODERS}")
+    if numerics not in CODEC_NUMERICS:
+        raise ValueError(f"codec_numerics must be one of {CODEC_NUMERICS}")
     if min_new_patches > max_new_patches:
         raise ValueError("min_new_patches must not exceed max_new_patches")
     dev = pipeline.device
@@ -194,7 +231,7 @@ def generate(
     handle = pipeline.model.stop_head.register_forward_hook(_hook(progress or (lambda: None)))
     started = time.perf_counter()
     try:
-        with _seeded(seed, dev):
+        with _seeded(seed, dev), codec_numerics(numerics):
             waveform, patches = pipeline.generate(
                 task=task,
                 decoder=decoder,
@@ -232,6 +269,7 @@ def generate(
         "cfg_value": float(cfg_value),
         "temperature": float(temperature),
         "reference_audio": prompt is not None,
+        "codec_numerics": numerics,
     }
     if dev.type == "cuda":
         report["peak_vram_allocated_gib"] = round(torch.cuda.max_memory_allocated(dev) / 1024**3, 3)

@@ -1,5 +1,5 @@
 {
-  "1": {"class_type": "SemBridgeLoader", "inputs": {"model_dir": "SemBridge", "dtype": "bfloat16", "device": "auto", "keep_loaded": true}},
+  "1": {"class_type": "SemBridgeLoader", "inputs": {"model_dir": "SemBridge", "dtype": "bfloat16", "device": "auto", "keep_loaded": true, "codec_numerics": "reproducible"}},
   "2": {"class_type": "SemBridgeTTS", "inputs": {"model": ["1", 0], "text": "Reading between the lines requires understanding.", "seed": 42, "decoder": "auto", "max_new_patches": 500, "min_new_patches": 2, "flow_steps": 10, "cfg_value": 2.0, "temperature": 1.0}},
   "3": {"class_type": "SaveAudio", "inputs": {"audio": ["2", 0], "filename_prefix": "audio/sembridge_tts"}},
   "4": {"class_type": "PreviewAny", "inputs": {"source": ["2", 1]}}

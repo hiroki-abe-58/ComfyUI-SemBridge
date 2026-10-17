@@ -72,6 +72,15 @@ COMMON = dict(seed=1, decoder="auto", max_new_patches=5, min_new_patches=2, flow
 def test_loader_handle_never_carries_half_precision_on_cpu(comfy_nodes):
     handle = _handle(comfy_nodes)
     assert handle["dtype"] == "float32" and handle["device"] == "cpu" and Path(handle["path"]).is_dir()
+    assert handle["codec_numerics"] == "reproducible"  # the default; workflows saved before the option existed keep working
+
+
+def test_loader_numerics_option_reaches_the_report(comfy_nodes):
+    n = comfy_nodes.NODE_CLASS_MAPPINGS
+    for mode in ("reproducible", "official-torchscript"):
+        handle = n["SemBridgeLoader"].execute("SemBridge", "float32", "cpu", True, mode).args[0]
+        out = n["SemBridgeTTS"].execute(handle, "Hello there.", **COMMON)
+        assert json.loads(out.args[1])["codec_numerics"] == mode
 
 
 def test_tts_singing_unified_nodes_return_audio_and_a_report(comfy_nodes):

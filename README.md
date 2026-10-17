@@ -14,7 +14,7 @@ type: mono, 44.1 kHz.
 
 | Node | Purpose |
 | --- | --- |
-| **SemBridge Loader** | Picks a model folder from `models/sembridge`, dtype (bfloat16 / float16 / float32), device, keep-loaded switch |
+| **SemBridge Loader** | Picks a model folder from `models/sembridge`, dtype (bfloat16 / float16 / float32), device, keep-loaded switch, `codec_numerics` (see *Reproducibility*) |
 | **SemBridge Text to Speech** | Chinese or English text → speech, optionally in the voice of a reference recording |
 | **SemBridge Singing** | An aligned score (lyric, MIDI pitch, seconds per note) → singing voice |
 | **SemBridge Speech + Singing** | Ordered speech and singing sections → one continuous voice |
@@ -27,7 +27,9 @@ Checked on Windows 11 with an RTX 5090 (32 GB), details and raw numbers in [docs
   the audio from these nodes equals the audio from the official `SemBridge.generate` sample for sample (16-bit PCM identical),
   when both run in the same Python environment: 10/10 with torch 2.8.0 (the range the official package supports) and
   10/10 with torch 2.14.1 + transformers 5.20 (what a current ComfyUI installs). The official command-line script, run
-  separately, produced the same files as the official API.
+  separately, produced the same files as the official API. This holds for both `codec_numerics` settings of the Loader
+  (see *Reproducibility* below): `official-torchscript` against the unmodified official code, `reproducible` (the default)
+  against the official code with the one function swapped.
 - **Runs through the real ComfyUI queue.** All 10 examples, executed as API workflows with `POST /prompt` in ComfyUI v0.38.0,
   succeeded. Interrupt, error messages, unload, all three dtypes and the CPU device were exercised with the real weights.
 - **Singing follows the score.** On the demo clip below, the median pitch error against the written notes is 0.15 semitone
@@ -124,9 +126,14 @@ verification page.
 ## Limits and things to know
 
 - **Reproducibility.** The same model, request, seed, settings *and environment* give the same audio. Across torch versions or GPUs
-  the numbers differ slightly and the autoregressive stop point can move by a few patches (the official README says the same). Inside
-  ComfyUI with its default *DynamicVRAM* (comfy-aimdo) enabled, 1 of the 10 official examples ended 2 patches earlier than in a
-  standalone run (all 10 were identical to the standalone result within the FLAC writer's 1 LSB with `--disable-dynamic-vram`).
+  the numbers differ slightly and the autoregressive stop point can move by a few patches (the official README says the same).
+  **First run after loading.** The official codec computes its Snake activation in a `@torch.jit.script` function, and TorchScript
+  re-optimizes such a function after its first calls: with the official code, the first generation after loading rounds differently from
+  every later one (the same request and seed gave 69 patches on the first call and 67 afterwards on torch 2.14.1; the reference-audio
+  encoder is where it enters, and the autoregressive loop amplifies it; torch 2.8.0 shows the same effect). The Loader's
+  `codec_numerics = reproducible` (default) evaluates the same formula with ordinary PyTorch ops, so every call gives the same audio
+  (checked: 4 calls identical on torch 2.8.0 and 2.14.1; cost about 10 ms per 16 s of decoded audio). `official-torchscript` keeps the
+  official function, e.g. to match the output of the official command line exactly.
 - **Long input.** For a 29 s test utterance (three long sentences) Whisper's transcript lacked the last six words; the model had
   stopped by itself (368 patches, below the 500 cap). Split very long text into sentences.
 - **Loudness varies** between outputs (official examples range from -12 to -31 dBFS RMS). Normalize downstream if you need it.

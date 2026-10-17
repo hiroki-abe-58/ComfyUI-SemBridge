@@ -43,6 +43,13 @@ def main(argv=None) -> int:
     parser.add_argument("--dtype", default="bfloat16")
     parser.add_argument("--device", default="cuda")
     parser.add_argument(
+        "--codec-numerics",
+        choices=("reproducible", "official-torchscript"),
+        default="official-torchscript",
+        help="official-torchscript: both sides use the official TorchScript Snake (call-history dependent, so both sides see the same "
+        "sequence of calls); reproducible: both sides use the plain-PyTorch Snake of runtime.codec_numerics (the official run is wrapped too)",
+    )
+    parser.add_argument(
         "--torchaudio-shim",
         type=Path,
         metavar="COMFYUI_DIR",
@@ -73,9 +80,24 @@ def main(argv=None) -> int:
     from sembridge import SemBridge as Official
     from sembridge.requests import load_request
 
+    import contextlib
+
+    import sembridge.models.savae as official_savae
+
     from sembridge_comfy import runtime
 
-    index = json.loads((args.upstream / "examples" / "index.json").read_text(encoding="utf-8"))["examples"]
+    official_snake = official_savae.snake
+
+    @contextlib.contextmanager
+    def official_numerics(mode):
+        """The official package is a different module object from the vendored copy, so switch its Snake here."""
+        official_savae.snake = runtime._eager_snake if mode == "reproducible" else official_snake
+        try:
+            yield
+        finally:
+            official_savae.snake = official_snake
+
+    index =json.loads((args.upstream / "examples" / "index.json").read_text(encoding="utf-8"))["examples"]
     if args.examples:
         index = [e for e in index if e["id"] in set(args.examples)]
     args.out.mkdir(parents=True, exist_ok=True)
@@ -88,7 +110,8 @@ def main(argv=None) -> int:
     for entry in index:
         request = load_request(args.upstream / "examples" / entry["request"])
         t0 = time.perf_counter()
-        wave_a, patches_a = official.generate(decoder="auto", **request)
+        with official_numerics(args.codec_numerics):
+            wave_a, patches_a = official.generate(decoder="auto", **request)
         t_a = time.perf_counter() - t0
 
         node_args = dict(request)
@@ -114,6 +137,7 @@ def main(argv=None) -> int:
             prompt=prompt,
             prompt_text=node_args.get("prompt_text"),
             prompt_task=node_args.get("prompt_task"),
+            numerics=args.codec_numerics,
         )
         t_b = time.perf_counter() - t0
         wave_b = out["audio"]["waveform"]
@@ -141,6 +165,7 @@ def main(argv=None) -> int:
         "torch": torch.__version__,
         "device": torch.cuda.get_device_name(0) if args.device.startswith("cuda") else "cpu",
         "dtype": args.dtype,
+        "codec_numerics": args.codec_numerics,
         "examples": len(rows),
         "pcm16_identical": sum(r["pcm16_identical"] for r in rows),
     }

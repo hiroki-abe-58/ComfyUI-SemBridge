@@ -24,10 +24,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 import queue_client  # noqa: E402
 
 
-def build(entry: dict, request: dict, ref_name: str | None, model_dir: str) -> dict:
+def build(entry: dict, request: dict, ref_name: str | None, model_dir: str, codec_numerics: str = "reproducible") -> dict:
     task = request["task"]
     gen = request.get("generation", {})
-    wf = {"1": {"class_type": "SemBridgeLoader", "inputs": {"model_dir": model_dir, "dtype": "bfloat16", "device": "auto", "keep_loaded": True}}}
+    wf = {
+        "1": {
+            "class_type": "SemBridgeLoader",
+            "inputs": {"model_dir": model_dir, "dtype": "bfloat16", "device": "auto", "keep_loaded": True, "codec_numerics": codec_numerics},
+        }
+    }
     common = {
         "model": ["1", 0],
         "seed": gen.get("seed", 42),
@@ -61,6 +66,8 @@ def main(argv=None) -> int:
     parser.add_argument("--official-dir", type=Path)
     parser.add_argument("--model-dir", default="SemBridge", help="folder name in models/sembridge")
     parser.add_argument("--examples", nargs="*")
+    parser.add_argument("--codec-numerics", choices=("reproducible", "official-torchscript"), default="reproducible")
+    parser.add_argument("--reverse", action="store_true", help="run the examples in reverse order (call-order independence check)")
     args = parser.parse_args(argv)
 
     index = json.loads((args.upstream / "examples" / "index.json").read_text(encoding="utf-8"))["examples"]
@@ -68,14 +75,14 @@ def main(argv=None) -> int:
         index = [e for e in index if e["id"] in set(args.examples)]
     args.out.mkdir(parents=True, exist_ok=True)
     rows, bad = [], 0
-    for entry in index:
+    for entry in (reversed(index) if args.reverse else index):
         request = json.loads((args.upstream / "examples" / entry["request"]).read_text(encoding="utf-8"))
         ref_name = None
         if request.get("prompt_audio"):
             src = (args.upstream / "examples" / entry["request"]).parent / request["prompt_audio"]
             ref_name = f"sembridge_ref_{src.name}"
             shutil.copyfile(src.resolve(), args.comfy_input / ref_name)
-        result = queue_client.run(args.server, build(entry, request, ref_name, args.model_dir), args.out, 900)
+        result = queue_client.run(args.server, build(entry, request, ref_name, args.model_dir, args.codec_numerics), args.out, 900)
         row = {"id": entry["id"], "status": result["status"], "wall_seconds": result["wall_seconds"], "error": result.get("error")}
         if result["status"] == "success":
             report = json.loads(next(iter(result["text"].values()))[0])

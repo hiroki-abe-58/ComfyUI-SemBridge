@@ -55,16 +55,20 @@ jobs:
           }
       - name: Install (CPU)
         run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true   # a failing pip must fail the step
           python -m pip install --upgrade pip
-          pip install -r refs/ComfyUI/requirements.txt pytest ruff "soundfile>=0.12"
-          # torch last, so that this leg really runs the pinned build (ComfyUI's requirements leave torch unpinned)
+          # CPU torch first: on Linux ComfyUI's unpinned `torch` requirement would otherwise pull the CUDA build and its libraries
           if ("${{ matrix.torch }}" -eq "2.8.0") {
             pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cpu
           } else {
             pip install torch==2.14.1 torchvision==0.29.1 --index-url https://download.pytorch.org/whl/cpu
           }
+          pip install -r refs/ComfyUI/requirements.txt pytest ruff "soundfile>=0.12"
+          # make sure the requirements did not change the pinned build
+          $torch = python -c "import torch; print(torch.__version__)"
+          if (-not $torch.StartsWith("${{ matrix.torch }}")) { throw "torch is $torch, expected ${{ matrix.torch }}" }
           pip list
-
       - name: Lint
         run: ruff check --no-cache ComfyUI-SemBridge
 
