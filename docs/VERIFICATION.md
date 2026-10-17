@@ -79,6 +79,9 @@ The two settings produce different (equally valid) audio for the same seed, like
 transcripts of the four official TTS examples generated with each variant had the same error rate (0.04 for `tts_zh_r001`, 0 for the other three; Chinese
 compared after traditional-to-simplified conversion).
 
+Re-run on 2026-10-18 (v0.1.1, six calls per fresh process, same request): all four hashes above came out again, call by call, and
+`reproducible` gave one hash for all six calls in both torch versions while `official-torchscript` differed on call 1 in both.
+
 Through the queue (clean install of this pack in a fresh ComfyUI, default `reproducible`), the 10 examples were run in the official order and
 again in reverse order: the decoded FLAC audio of the two runs is identical for 10 of 10 examples, and every file is within 1 LSB of the
 in-environment official output (section 2, torch 2.14, same setting) for 10 of 10 (the FLAC writer's rounding).
@@ -150,6 +153,41 @@ intelligibility, not a listening test; the clips have **not** been judged by a h
 The default level of the BigVGAN outputs is low (the unified demo is about -30 dBFS RMS); the official examples range from -12 to
 -31 dBFS.
 
+## 6a. A broader automatic test (70 clips, new texts and scores, no reference voice)
+
+`scripts/eval_generation.py` (generation in-process through the pack's runtime, torch 2.14.1+cu130, bfloat16, default `reproducible`,
+RTX 5090), then `scripts/eval_asr.py` (Whisper small) and `scripts/summarize_eval.py`. 8 English and 8 Chinese texts of different
+kinds (2 to 34 words, numbers, a tongue twister, a classical poem) x 3 seeds, 6 scores x 3 seeds, 2 mixed requests x 2 seeds. Every clip
+finished in one run; the whole set took 506 s. **These are automatic indicators; nobody listened to the clips (HUMAN_AUDIO_REVIEW_PENDING stays).**
+
+| Group (clips) | Seconds of audio | Audio s per generation s | Peak / RMS dBFS (median) | Share of 20 ms frames below -50 dBFS | Hit the length cap | Samples at full scale |
+| --- | --- | --- | --- | --- | --- | --- |
+| TTS English (24) | 0.8 to 11.5 | 0.55 to 1.02 | -3.5 / -22.5 | median 0.16 (leading 0.15 s, trailing 0.20 s) | 0 | 0 clips |
+| TTS Chinese (24) | 2.1 to 11.2 | 0.64 to 0.98 | -3.0 / -22.5 | median 0.23 | 0 | 0 clips |
+| Singing (18) | 3.4 to 7.9 | 0.43 to 0.65 | -2.6 / -18.6 | median 0.03 | **1** | **5 clips** |
+| Mixed (4) | 5.2 to 6.9 | 0.45 to 0.52 | -2.6 / -16.8 | median 0.20 | 0 | 0 clips |
+
+Peak VRAM allocated: 2.75 to 3.37 GiB (speech), 2.94 to 3.33 GiB (singing), up to 3.24 GiB (mixed). No NaN or non-finite audio. Generation is
+slower than real time in every group.
+
+- **Whisper round trip (speech).** Mean error rate 0.110 (English, word level) and 0.106 (Chinese, character level after traditional-to-simplified
+  conversion). The errors are concentrated: for English, three sentences give the same error on all three seeds and each is a spelling
+  difference of the recognizer ("sea shells" written "seashells", "three thirty ... two hundred and four" written "3.30 ... 204", "river bank"
+  written "riverbank"); the other five sentences were transcribed exactly on every seed. For Chinese, numerals (三点 written "3點", 二零四 written
+  "204") account for most of the rest; the tongue twister gave error rates 0.06, 0.19 and **0.81** (seed 3 was garbled), and the classical poem 0.15 to 0.30
+  (on all three seeds "不觉晓" came back as "不绝小"/"不絕小", which may be a pronunciation of the polyphonic character 觉; not checked by ear).
+  Whisper's own mistakes and the pack's cannot be told apart from these numbers.
+- **Singing, pitch (`scripts/eval_pitch.py`, rough).** 119 of 120 notes had a clear pitch. For the 15 clips with notes between MIDI 48 and 72 the
+  median folded error was 0.04 to 0.48 semitone and 14 of 15 clips had every note within one semitone. **The wide-leap score in the high register
+  (MIDI 72 to 79, `high_leaps_la`) failed on all three seeds**: median error 2.4, 4.2 and 3.2 semitones, 33 %, 0 % and 17 % of notes within one
+  semitone, and seed 2 did not stop (it ran to the 1.8x length cap, 7.9 s for a 4.4 s score). Scores that high are outside what this test
+  supports.
+- **Clipping.** The output is clamped to [-1, 1], as the official WAV writer does. 5 of 18 singing clips contain samples at full scale; in one
+  (`low_la`, seed 2) 2.0 % of all samples are at full scale, which is probably audible as distortion. No speech or mixed clip reached full scale
+  (highest peak -0.1 dBFS in speech). If your singing output sounds crunchy, that clamp is the first thing to suspect; the node does not scale the audio.
+- **Silence.** Speech clips carry 0 to 0.74 s of leading and 0 to 0.7 s (Chinese: up to 1.3 s) of trailing silence; 0 of 70 clips were silent or
+  empty.
+
 ## 7. Tests
 
 | Where | What | Result |
@@ -178,5 +216,7 @@ python scripts/check_call_history.py --upstream <SemBridge checkout> --model <mo
 python scripts/queue_examples.py --server http://127.0.0.1:8188 --upstream <SemBridge checkout> --comfy-input <ComfyUI>/input --out <dir> [--reverse]
 python scripts/queue_client.py workflows/api/singing_basic.json --server http://127.0.0.1:8188 --set 2.seed=7
 python scripts/eval_pitch.py <clip.flac> --score-file <score.txt>
+python scripts/eval_generation.py --model <model folder> --out <dir> --comfyui <ComfyUI>        # section 6a (70 clips)
+python scripts/eval_asr.py --results <dir>/results.jsonl && python scripts/summarize_eval.py <dir>
 python scripts/ci_queue_check.py --comfyui <ComfyUI> --tokenizer-dir <tokenizer files>
 ```

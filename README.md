@@ -138,6 +138,12 @@ verification page.
 - **Long input.** For a 29 s test utterance (three long sentences) Whisper's transcript lacked the last six words; the model had
   stopped by itself (368 patches, below the 500 cap). Split very long text into sentences.
 - **Loudness varies** between outputs (official examples range from -12 to -31 dBFS RMS). Normalize downstream if you need it.
+- **Singing can clip, and high scores are weak.** The output is clamped to [-1, 1] (as the official WAV writer does), so it is never
+  scaled down. In an automatic test of 18 new singing requests, 5 clips touched full scale and one had 2 % of its samples clamped. A
+  wide-leap score in the high register (MIDI 72 to 79) failed on all 3 seeds (median pitch error 2.4 to 4.2 semitones; one run did not stop
+  and ran to the length cap), while scores in MIDI 48 to 72 stayed within about half a semitone in the median. Details and the speech
+  results (Whisper round trip on 48 clips) are in section 6a of the [verification page](docs/VERIFICATION.md#6a-a-broader-automatic-test-70-clips-new-texts-and-scores-no-reference-voice).
+  Nobody has listened to these clips.
 - **Leading whitespace** of texts is removed, because transformers 4.x and 5.x tokenize a leading space differently (all other
   strings tokenized identically in a 412-string check).
 - **Languages:** the model card lists Chinese and English.
