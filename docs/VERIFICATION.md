@@ -176,7 +176,7 @@ python scripts/parity_vs_official.py --upstream <SemBridge checkout> --model <mo
 python scripts/parity_vs_official.py ... --codec-numerics official-torchscript --torchaudio-shim <ComfyUI>                                      # stock ComfyUI environment
 python scripts/check_call_history.py --upstream <SemBridge checkout> --model <model folder> --codec-numerics reproducible --comfyui <ComfyUI>   # section 3
 python scripts/queue_examples.py --server http://127.0.0.1:8188 --upstream <SemBridge checkout> --comfy-input <ComfyUI>/input --out <dir> [--reverse]
-python tools/queue_client.py workflows/api/singing_basic.json --server http://127.0.0.1:8188 --set 2.seed=7
+python scripts/queue_client.py workflows/api/singing_basic.json --server http://127.0.0.1:8188 --set 2.seed=7
 python scripts/eval_pitch.py <clip.flac> --score-file <score.txt>
 python scripts/ci_queue_check.py --comfyui <ComfyUI> --tokenizer-dir <tokenizer files>
 ```

@@ -166,7 +166,7 @@ python scripts/ci_queue_check.py --comfyui <ComfyUI> --tokenizer-dir <tokenizer 
 python scripts/parity_vs_official.py --upstream <SemBridge checkout> --model <model folder> --out <dir>   # needs the real weights
 ```
 
-`tools/queue_client.py` submits any API workflow to a running ComfyUI. `scripts/queue_examples.py` runs the official examples through
+`scripts/queue_client.py` submits any API workflow to a running ComfyUI. `scripts/queue_examples.py` runs the official examples through
 a live queue, `scripts/eval_pitch.py` checks a sung result against its score. Refreshing the vendored code: replace
 `sembridge_comfy/vendor/sembridge` with the new upstream files, run `scripts/update_vendor_manifest.py`, update `UPSTREAM.md` and
 the commit in `.github/workflows/ci.yml`.

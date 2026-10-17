@@ -1,6 +1,6 @@
 """Submit an API-format workflow to a running ComfyUI, wait for it, and save the outputs (standard library only).
 
-    python tools/queue_client.py workflows/api/tts_basic.json --server http://127.0.0.1:8188 --out outputs/ \
+    python scripts/queue_client.py workflows/api/tts_basic.json --server http://127.0.0.1:8188 --out outputs/ \
         --set 3.text="Hello there." --set 3.seed=7
 
 The workflow runs through the normal ComfyUI queue (POST /prompt), exactly as the web UI would run it.

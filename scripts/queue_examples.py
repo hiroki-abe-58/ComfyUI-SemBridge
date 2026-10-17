@@ -20,7 +20,7 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import queue_client  # noqa: E402
 
 

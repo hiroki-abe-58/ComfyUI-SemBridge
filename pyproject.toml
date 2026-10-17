@@ -1,7 +1,7 @@
 [project]
 name = "sembridge"
 description = "SemBridge speech, singing and mixed speech+singing generation for ComfyUI: the official ASLP-lab model, run in-process, 44.1 kHz AUDIO output, verified sample-for-sample against the official code."
-version = "0.1.0"
+version = "0.1.1"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = ["soundfile>=0.12"]
