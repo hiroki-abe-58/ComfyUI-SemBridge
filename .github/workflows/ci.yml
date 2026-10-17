@@ -1,0 +1,95 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# CPU only. No trained weights are downloaded: the model tests and the real-queue check use a tiny random-initialized model.
+# Only the three small tokenizer files of the official model are fetched (pinned revision, SHA-256 checked) because the
+# official loader checks the vocabulary size and task-token IDs.
+env:
+  COMFYUI_REF: v0.38.0
+  COMFYUI_COMMIT: 6b747c0428c343e1417219641db93a4fb7cb69ae
+  UPSTREAM_COMMIT: e8bee2777a0dececf87efb6705992c974b51c9b4
+  MODEL_REVISION: 4fb6534f7c697f0aea90e71dc5a6f3123596ae45
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        torch: ["2.8.0", "2.14.1"]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: ComfyUI-SemBridge
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Reference checkouts and tokenizer files (pinned)
+        run: |
+          git -c core.autocrlf=false clone --quiet --depth 1 --branch $env:COMFYUI_REF https://github.com/Comfy-Org/ComfyUI.git refs/ComfyUI
+          if ((git -C refs/ComfyUI rev-parse HEAD) -ne $env:COMFYUI_COMMIT) { throw "ComfyUI commit mismatch" }
+          git -c core.autocrlf=false clone --quiet --filter=blob:none https://github.com/ASLP-lab/SemBridge.git refs/SemBridge
+          git -C refs/SemBridge -c core.autocrlf=false checkout --quiet $env:UPSTREAM_COMMIT
+          New-Item -ItemType Directory -Force refs/tokenizer | Out-Null
+          # tests/tokenizer_files.sha256: "<sha256>  <file name>" per line, taken from the pinned Hub revision
+          foreach ($line in Get-Content ComfyUI-SemBridge/tests/tokenizer_files.sha256) {
+            $expected, $name = $line -split '\s+', 2
+            Invoke-WebRequest -UseBasicParsing -OutFile "refs/tokenizer/$name" "https://huggingface.co/ASLP-lab/SemBridge/resolve/$($env:MODEL_REVISION)/$name"
+            if ((Get-FileHash "refs/tokenizer/$name" -Algorithm SHA256).Hash.ToLower() -ne $expected) { throw "$name hash mismatch" }
+          }
+      - name: Install (CPU)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r refs/ComfyUI/requirements.txt pytest ruff "soundfile>=0.12"
+          # torch last, so that this leg really runs the pinned build (ComfyUI's requirements leave torch unpinned)
+          if ("${{ matrix.torch }}" -eq "2.8.0") {
+            pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+          } else {
+            pip install torch==2.14.1 torchvision==0.29.1 --index-url https://download.pytorch.org/whl/cpu
+          }
+          pip list
+
+      - name: Lint
+        run: ruff check --no-cache ComfyUI-SemBridge
+
+      - name: No absolute local paths in the repository
+        run: |
+          $files = git -C ComfyUI-SemBridge ls-files | Where-Object { $_ -notmatch '\.(png|jpg|flac|wav)$' } | ForEach-Object { Join-Path ComfyUI-SemBridge $_ }
+          $hits = $files | Select-String -Pattern '[A-Za-z]:\\{1,2}[A-Za-z0-9_.-]+\\|/home/[a-z]+/|/Users/[A-Za-z]+/'
+          if ($hits) { $hits | ForEach-Object { "$($_.Path):$($_.LineNumber)" }; throw "absolute local path found" }
+
+      - name: Tests (references required, nothing may be skipped)
+        env:
+          SEMBRIDGE_COMFYUI_DIR: ${{ github.workspace }}/refs/ComfyUI
+          SEMBRIDGE_UPSTREAM_DIR: ${{ github.workspace }}/refs/SemBridge
+          SEMBRIDGE_TOKENIZER_DIR: ${{ github.workspace }}/refs/tokenizer
+          SEMBRIDGE_REQUIRE_REFERENCES: "1"
+          SEMBRIDGE_REQUIRE_TORCHAUDIO: ${{ matrix.torch == '2.8.0' && '1' || '0' }}
+        run: |
+          Set-Location ComfyUI-SemBridge
+          python -m pytest tests -q -rs -p no:cacheprovider -W ignore::DeprecationWarning -W ignore::FutureWarning
+
+      - name: Real ComfyUI queue on CPU (tiny model)
+        run: |
+          python ComfyUI-SemBridge/scripts/ci_queue_check.py --comfyui refs/ComfyUI --tokenizer-dir refs/tokenizer --workdir queue-logs
+
+      - name: ComfyUI log on failure
+        if: failure()
+        run: |
+          if (Test-Path queue-logs/comfyui.log) { Get-Content queue-logs/comfyui.log -Tail 120 }

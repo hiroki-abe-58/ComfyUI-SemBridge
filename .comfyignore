@@ -1,0 +1,7 @@
+tests/
+.github/
+scripts/
+docs/images/
+docs/audio/
+workflows/gui/
+

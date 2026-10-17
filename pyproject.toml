@@ -1,0 +1,26 @@
+[project]
+name = "sembridge"
+description = "SemBridge speech, singing and mixed speech+singing generation for ComfyUI: the official ASLP-lab model, run in-process, 44.1 kHz AUDIO output, verified sample-for-sample against the official code."
+version = "0.1.0"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+dependencies = ["soundfile>=0.12"]
+
+[project.urls]
+Repository = "https://github.com/hiroki-abe-58/ComfyUI-SemBridge"
+
+[tool.comfy]
+PublisherId = "hiroki-abe-58"
+DisplayName = "SemBridge for ComfyUI"
+Icon = ""
+
+[tool.ruff]
+line-length = 180
+target-version = "py310"
+extend-exclude = ["sembridge_comfy/vendor"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,6 @@
+{
+  "1": {"class_type": "SemBridgeScorePreview", "inputs": {"score": "la 60 0.5\nla 62 0.5\nla 64 1.0\n<SP> 0 0.4"}},
+  "2": {"class_type": "PreviewAny", "inputs": {"source": ["1", 0]}},
+  "3": {"class_type": "PreviewAny", "inputs": {"source": ["1", 1]}},
+  "4": {"class_type": "PreviewAny", "inputs": {"source": ["1", 2]}}
+}
