@@ -133,7 +133,8 @@ verification page.
   encoder is where it enters, and the autoregressive loop amplifies it; torch 2.8.0 shows the same effect). The Loader's
   `codec_numerics = reproducible` (default) evaluates the same formula with ordinary PyTorch ops, so every call gives the same audio
   (checked: 4 calls identical on torch 2.8.0 and 2.14.1; cost about 10 ms per 16 s of decoded audio). `official-torchscript` keeps the
-  official function, e.g. to match the output of the official command line exactly.
+  official function, e.g. to match the output of the official command line exactly. A one-function fix is proposed upstream
+  ([ASLP-lab/SemBridge#2](https://github.com/ASLP-lab/SemBridge/pull/2)); I do not know whether it will be accepted.
 - **Long input.** For a 29 s test utterance (three long sentences) Whisper's transcript lacked the last six words; the model had
   stopped by itself (368 patches, below the 500 cap). Split very long text into sentences.
 - **Loudness varies** between outputs (official examples range from -12 to -31 dBFS RMS). Normalize downstream if you need it.
