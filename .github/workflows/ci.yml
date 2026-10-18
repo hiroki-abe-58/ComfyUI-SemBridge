@@ -13,8 +13,6 @@ permissions:
 # Only the three small tokenizer files of the official model are fetched (pinned revision, SHA-256 checked) because the
 # official loader checks the vocabulary size and task-token IDs.
 env:
-  COMFYUI_REF: v0.38.0
-  COMFYUI_COMMIT: 6b747c0428c343e1417219641db93a4fb7cb69ae
   UPSTREAM_COMMIT: e8bee2777a0dececf87efb6705992c974b51c9b4
   MODEL_REVISION: 4fb6534f7c697f0aea90e71dc5a6f3123596ae45
 
@@ -23,8 +21,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        comfyui: ["v0.38.0"]  # the ComfyUI release the pack was verified with
         os: [ubuntu-24.04, windows-latest]
         torch: ["2.8.0", "2.14.1"]
+        include:
+          # the current ComfyUI release as well
+          - os: ubuntu-24.04
+            comfyui: "v0.41.0"
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     defaults:
@@ -42,8 +45,9 @@ jobs:
 
       - name: Reference checkouts and tokenizer files (pinned)
         run: |
-          git -c core.autocrlf=false clone --quiet --depth 1 --branch $env:COMFYUI_REF https://github.com/Comfy-Org/ComfyUI.git refs/ComfyUI
-          if ((git -C refs/ComfyUI rev-parse HEAD) -ne $env:COMFYUI_COMMIT) { throw "ComfyUI commit mismatch" }
+          git -c core.autocrlf=false clone --quiet --depth 1 --branch "${{ matrix.comfyui }}" https://github.com/Comfy-Org/ComfyUI.git refs/ComfyUI
+          $pinned = @{ 'v0.38.0' = '6b747c0428c343e1417219641db93a4fb7cb69ae'; 'v0.41.0' = '98cc0bf84b7cb1383654c5b402e7612d875d6d22' }["${{ matrix.comfyui }}"]
+          if (-not $pinned -or (git -C refs/ComfyUI rev-parse HEAD) -ne $pinned) { throw "ComfyUI commit mismatch" }
           git -c core.autocrlf=false clone --quiet --filter=blob:none https://github.com/ASLP-lab/SemBridge.git refs/SemBridge
           git -C refs/SemBridge -c core.autocrlf=false checkout --quiet $env:UPSTREAM_COMMIT
           New-Item -ItemType Directory -Force refs/tokenizer | Out-Null
