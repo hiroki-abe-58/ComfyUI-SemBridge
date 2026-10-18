@@ -27,6 +27,7 @@ jobs:
         include:
           # the current ComfyUI release as well
           - os: ubuntu-24.04
+            torch: "2.14.1"
             comfyui: "v0.41.0"
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
